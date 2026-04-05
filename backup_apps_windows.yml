@@ -1,0 +1,45 @@
+---
+- name: Respaldo Dinámico de Aplicaciones (Sin Logs)
+  hosts: Servidores_Aplicaciones
+  gather_facts: yes
+  vars:
+    # Definimos qué NO queremos (Logs y temporales)
+    exclude_extensions: ['*.log', '*.txt', '*.tmp', '*.bak', 'W3SVC*']
+    central_backup_path: "/backups/Apps_Prod"
+    temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
+
+  tasks:
+    - name: 1. Detectar unidades locales
+      set_fact:
+        active_drives: "{{ ansible_facts.mounts | selectattr('drive_letter') | map(attribute='drive_letter') | map('regex_replace', '$', ':\\') | list }}"
+
+    - name: 2. Buscar archivos (Excluyendo Logs)
+      win_find:
+        paths: "{{ active_drives }}"
+        patterns: "*"  # Traemos todo...
+        excludes: "{{ exclude_extensions }}" # ...menos los logs
+        recurse: yes
+        file_type: file
+        # Excluimos rutas de sistema y carpetas típicas de Logs de IIS
+        get_checksum: no # Para ganar velocidad
+      register: app_files
+
+    - name: 3. Comprimir lo encontrado
+      community.windows.win_zip:
+        dest: "{{ temp_zip }}"
+        sources: "{{ item.path }}"
+        action: add
+      loop: "{{ app_files.files }}"
+      when: app_files.matched > 0
+
+    - name: 4. Transferir a la unidad de 100GB en dsb57
+      fetch:
+        src: "{{ temp_zip }}"
+        dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup_app.zip"
+        flat: yes
+      when: app_files.matched > 0
+
+    - name: 5. Limpiar temporal
+      win_file:
+        path: "{{ temp_zip }}"
+        state: absent
