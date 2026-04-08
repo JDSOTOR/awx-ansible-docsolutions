@@ -3,38 +3,26 @@
   hosts: Servidores_Apps
   gather_facts: yes
   vars:
-    # Cambiamos la lógica de exclusión a la soportada por win_find
-    logs_to_exclude: 
-      - '.*\.log$'
-      - '.*\.txt$'
-      - '.*\.tmp$'
-      - '.*\.bak$'
+    # Regex que dice: "Cualquier archivo que NO termine en .log, .txt, .tmp o .bak"
+    regex_sin_logs: '^(?!.*(\.log|\.txt|\.tmp|\.bak)$).*$'
     central_backup_path: "/backups/Apps_Prod"
     temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
 
   tasks:
-    - name: 1. Inicializar lista de unidades
+    - name: 1. Forzar detección de unidades (Fallback)
       set_fact:
-        active_drives: []
+        active_drives: "{{ ansible_facts.mounts | map(attribute='mount') | list }}"
 
-    - name: 2. Construir lista de unidades detectadas
-      set_fact:
-        active_drives: "{{ active_drives + [ item.mount + '\\' ] }}"
-      loop: "{{ ansible_facts.mounts }}"
-      # Filtramos para que solo tome discos locales fijos
-      when: item.mount is defined and item.drive_letter != ""
-
-    - name: 3. Buscar archivos (Excluyendo Logs)
+    - name: 2. Buscar archivos (Usando Regex Negativa)
       win_find:
         paths: "{{ active_drives }}"
-        patterns: "*"
-        exclude_patterns: "{{ logs_to_exclude }}"
+        patterns: "{{ regex_sin_logs }}"
         use_regex: yes
         recurse: yes
         file_type: file
       register: app_files
 
-    - name: 4. Comprimir lo encontrado
+    - name: 3. Comprimir lo encontrado
       community.windows.win_zip:
         dest: "{{ temp_zip }}"
         sources: "{{ item.path }}"
@@ -42,14 +30,14 @@
       loop: "{{ app_files.files }}"
       when: app_files.matched > 0
 
-    - name: 5. Transferir a la unidad de 100GB en dsb57
+    - name: 4. Transferir a la unidad de 100GB en dsb57
       fetch:
         src: "{{ temp_zip }}"
         dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup_app.zip"
         flat: yes
       when: app_files.matched > 0
 
-    - name: 6. Limpiar temporal
+    - name: 5. Limpieza Final
       win_file:
         path: "{{ temp_zip }}"
         state: absent
