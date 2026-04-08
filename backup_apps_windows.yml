@@ -3,20 +3,11 @@
   hosts: Servidores_Apps
   gather_facts: yes
   vars:
-    # Regex para ignorar archivos temporales y logs
-    regex_sin_logs: '^(?!.*(\.log|\.txt|\.tmp|\.bak)$).*$'
+    # Esta Regex busca archivos que:
+    # 1. NO estén en Windows, Program Files, Users, etc. (?!.*(Windows|Program Files|...))
+    # 2. NO terminen en .log, .txt, .tmp, .bak (\.(log|txt|tmp|bak)$)$
+    regex_maestra: '^(?!.*(Windows|Program Files|Program Files \(x86\)|Users|Recycle\.Bin|System Volume Information|ProgramData|PerfLogs)).*(?<!\.(log|txt|tmp|bak))$'
     
-    # Directorios del Sistema Operativo que NO queremos tocar
-    carpetas_excluidas:
-      - "C:\\Windows"
-      - "C:\\Program Files"
-      - "C:\\Program Files (x86)"
-      - "C:\\Users"
-      - "C:\\$Recycle.Bin"
-      - "C:\\System Volume Information"
-      - "C:\\PerfLogs"
-      - "C:\\ProgramData"
-
     central_backup_path: "/backups/Apps_Prod"
     temp_zip: "C:\\Windows\\Temp\\backup_apps.zip"
 
@@ -30,11 +21,10 @@
       set_fact:
         active_drives: "{{ drive_out.stdout_lines | map('trim') | list }}"
 
-    - name: 3. Buscar archivos de aplicación (Excluyendo SO y Logs)
+    - name: 3. Buscar archivos de aplicación (Filtrado por Regex)
       win_find:
         paths: "{{ active_drives }}"
-        patterns: "{{ regex_sin_logs }}"
-        exclude_directories: "{{ carpetas_excluidas }}"
+        patterns: "{{ regex_maestra }}"
         use_regex: yes
         recurse: yes
         file_type: file
