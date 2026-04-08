@@ -1,19 +1,20 @@
 ---
-- name: Respaldo Dinámico de Aplicaciones (Sin Logs)
+- name: Respaldo Dinámico Multiserver (DocSolutions)
   hosts: Servidores_Apps
-  gather_facts: yes
+  gather_facts: yes  # Obligatorio para detectar hardware dinámicamente
   vars:
-    # Regex que dice: "Cualquier archivo que NO termine en .log, .txt, .tmp o .bak"
     regex_sin_logs: '^(?!.*(\.log|\.txt|\.tmp|\.bak)$).*$'
     central_backup_path: "/backups/Apps_Prod"
-    temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
+    temp_zip: "C:\\Windows\\Temp\\backup_apps.zip"
 
   tasks:
-    - name: 1. Forzar detección de unidades (Fallback)
+    - name: 1. Extraer letras de unidad activas (Dinámico)
       set_fact:
-        active_drives: "{{ ansible_facts.mounts | map(attribute='mount') | list }}"
+        active_drives: "{{ ansible_facts.mounts | selectattr('drive_letter', 'defined') | map(attribute='drive_letter') | map('regex_replace', '^(.*)$', '\\1:\\') | list }}"
+      # Si un servidor no reporta mounts, fallará aquí con un mensaje claro
+      failed_when: active_drives | length == 0
 
-    - name: 2. Buscar archivos (Usando Regex Negativa)
+    - name: 2. Buscar archivos en todas las unidades detectadas
       win_find:
         paths: "{{ active_drives }}"
         patterns: "{{ regex_sin_logs }}"
@@ -22,22 +23,23 @@
         file_type: file
       register: app_files
 
-    - name: 3. Comprimir lo encontrado
+    - name: 3. Comprimir hallazgos
       community.windows.win_zip:
         dest: "{{ temp_zip }}"
         sources: "{{ item.path }}"
         action: add
       loop: "{{ app_files.files }}"
       when: app_files.matched > 0
+      no_log: true
 
-    - name: 4. Transferir a la unidad de 100GB en dsb57
+    - name: 4. Transferir a dsb57 (Estructura Dinámica)
       fetch:
         src: "{{ temp_zip }}"
-        dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup_app.zip"
+        dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup.zip"
         flat: yes
       when: app_files.matched > 0
 
-    - name: 5. Limpieza Final
+    - name: 5. Purga de temporal
       win_file:
         path: "{{ temp_zip }}"
         state: absent
