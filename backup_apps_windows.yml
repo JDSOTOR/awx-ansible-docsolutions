@@ -3,7 +3,12 @@
   hosts: Servidores_Apps
   gather_facts: yes
   vars:
-    exclude_extensions: ['*.log', '*.txt', '*.tmp', '*.bak', 'W3SVC*']
+    # Cambiamos la lógica de exclusión a la soportada por win_find
+    logs_to_exclude: 
+      - '.*\.log$'
+      - '.*\.txt$'
+      - '.*\.tmp$'
+      - '.*\.bak$'
     central_backup_path: "/backups/Apps_Prod"
     temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
 
@@ -14,15 +19,17 @@
 
     - name: 2. Construir lista de unidades detectadas
       set_fact:
-        active_drives: "{{ active_drives + [ item.drive_letter + ':\\' ] }}"
+        active_drives: "{{ active_drives + [ item.mount + '\\' ] }}"
       loop: "{{ ansible_facts.mounts }}"
-      when: item.drive_letter is defined and item.drive_letter != ""
+      # Filtramos para que solo tome discos locales fijos
+      when: item.mount is defined and item.drive_letter != ""
 
     - name: 3. Buscar archivos (Excluyendo Logs)
       win_find:
         paths: "{{ active_drives }}"
         patterns: "*"
-        excludes: "{{ exclude_extensions }}"
+        exclude_patterns: "{{ logs_to_exclude }}"
+        use_regex: yes
         recurse: yes
         file_type: file
       register: app_files
