@@ -3,7 +3,6 @@
   hosts: Servidores_Apps
   gather_facts: yes
   vars:
-    # Definimos qué NO queremos (Logs y temporales)
     exclude_extensions: ['*.log', '*.txt', '*.tmp', '*.bak', 'W3SVC*']
     central_backup_path: "/backups/Apps_Prod"
     temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
@@ -11,17 +10,15 @@
   tasks:
     - name: 1. Detectar unidades locales
       set_fact:
-        active_drives: "{{ ansible_facts.mounts | selectattr('drive_letter') | map(attribute='drive_letter') | map('regex_replace', '$', ':\\') | list }}"
+        active_drives: "{{ ansible_facts.mounts | map(attribute='drive_letter') | map('regex_replace', '^(.*)$', '\\1:\\') | list }}"
 
     - name: 2. Buscar archivos (Excluyendo Logs)
       win_find:
         paths: "{{ active_drives }}"
-        patterns: "*"  # Traemos todo...
-        excludes: "{{ exclude_extensions }}" # ...menos los logs
+        patterns: "*"
+        excludes: "{{ exclude_extensions }}"
         recurse: yes
         file_type: file
-        # Excluimos rutas de sistema y carpetas típicas de Logs de IIS
-        get_checksum: no # Para ganar velocidad
       register: app_files
 
     - name: 3. Comprimir lo encontrado
