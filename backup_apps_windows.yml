@@ -1,6 +1,6 @@
 ---
 - name: Respaldo Dinámico de Aplicaciones (Sin Logs)
-  hosts: Servidores_Aplicaciones
+  hosts: Servidores_Apps
   gather_facts: yes
   vars:
     # Definimos qué NO queremos (Logs y temporales)
