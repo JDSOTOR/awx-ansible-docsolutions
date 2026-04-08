@@ -8,11 +8,17 @@
     temp_zip: "C:\\Windows\\Temp\\backup_limpio.zip"
 
   tasks:
-    - name: 1. Detectar unidades locales
+    - name: 1. Inicializar lista de unidades
       set_fact:
-        active_drives: "{{ ansible_facts.mounts | map(attribute='drive_letter') | map('regex_replace', '^(.*)$', '\\1:\\') | list }}"
+        active_drives: []
 
-    - name: 2. Buscar archivos (Excluyendo Logs)
+    - name: 2. Construir lista de unidades detectadas
+      set_fact:
+        active_drives: "{{ active_drives + [ item.drive_letter + ':\\' ] }}"
+      loop: "{{ ansible_facts.mounts }}"
+      when: item.drive_letter is defined and item.drive_letter != ""
+
+    - name: 3. Buscar archivos (Excluyendo Logs)
       win_find:
         paths: "{{ active_drives }}"
         patterns: "*"
@@ -21,7 +27,7 @@
         file_type: file
       register: app_files
 
-    - name: 3. Comprimir lo encontrado
+    - name: 4. Comprimir lo encontrado
       community.windows.win_zip:
         dest: "{{ temp_zip }}"
         sources: "{{ item.path }}"
@@ -29,14 +35,14 @@
       loop: "{{ app_files.files }}"
       when: app_files.matched > 0
 
-    - name: 4. Transferir a la unidad de 100GB en dsb57
+    - name: 5. Transferir a la unidad de 100GB en dsb57
       fetch:
         src: "{{ temp_zip }}"
         dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup_app.zip"
         flat: yes
       when: app_files.matched > 0
 
-    - name: 5. Limpiar temporal
+    - name: 6. Limpiar temporal
       win_file:
         path: "{{ temp_zip }}"
         state: absent
