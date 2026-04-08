@@ -1,20 +1,23 @@
 ---
 - name: Respaldo Dinámico Multiserver (DocSolutions)
   hosts: Servidores_Apps
-  gather_facts: yes  # Obligatorio para detectar hardware dinámicamente
+  gather_facts: yes
   vars:
     regex_sin_logs: '^(?!.*(\.log|\.txt|\.tmp|\.bak)$).*$'
     central_backup_path: "/backups/Apps_Prod"
     temp_zip: "C:\\Windows\\Temp\\backup_apps.zip"
 
   tasks:
-    - name: 1. Extraer letras de unidad activas (Dinámico)
-      set_fact:
-        active_drives: "{{ ansible_facts.mounts | selectattr('drive_letter', 'defined') | map(attribute='drive_letter') | map('regex_replace', '^(.*)$', '\\1:\\') | list }}"
-      # Si un servidor no reporta mounts, fallará aquí con un mensaje claro
-      failed_when: active_drives | length == 0
+    - name: 1. Obtener letras de unidad vía PowerShell
+      win_shell: |
+        Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root
+      register: drive_out
 
-    - name: 2. Buscar archivos en todas las unidades detectadas
+    - name: 2. Normalizar lista de unidades
+      set_fact:
+        active_drives: "{{ drive_out.stdout_lines | map('trim') | list }}"
+
+    - name: 3. Buscar archivos en todas las unidades detectadas
       win_find:
         paths: "{{ active_drives }}"
         patterns: "{{ regex_sin_logs }}"
@@ -23,7 +26,7 @@
         file_type: file
       register: app_files
 
-    - name: 3. Comprimir hallazgos
+    - name: 4. Comprimir hallazgos
       community.windows.win_zip:
         dest: "{{ temp_zip }}"
         sources: "{{ item.path }}"
@@ -32,14 +35,14 @@
       when: app_files.matched > 0
       no_log: true
 
-    - name: 4. Transferir a dsb57 (Estructura Dinámica)
+    - name: 5. Transferir a dsb57 (Estructura Dinámica)
       fetch:
         src: "{{ temp_zip }}"
         dest: "{{ central_backup_path }}/{{ inventory_hostname }}/{{ ansible_date_time.date }}/backup.zip"
         flat: yes
       when: app_files.matched > 0
 
-    - name: 5. Purga de temporal
+    - name: 6. Purga de temporal
       win_file:
         path: "{{ temp_zip }}"
         state: absent
