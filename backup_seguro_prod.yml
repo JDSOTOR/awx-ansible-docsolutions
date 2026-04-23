@@ -31,7 +31,7 @@
       fetch:
         src: "{{ temp_zip_code }}"
         # Usamos la ruta relativa al montaje para evitar que toque carpetas superiores de sistema
-        dest: "/var/lib/awx/projects/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}/codigo_apps.zip"
+        dest: "/runner/project/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}/codigo_apps.zip"
         flat: yes
 
     - name: 5. Limpieza final en Windows
