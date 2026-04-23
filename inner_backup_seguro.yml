@@ -1,13 +1,13 @@
 ---
 - name: "Backup Atómico y Push SMB: {{ product.filename }}"
   block:
-    - name: "1. Preparar espejo limpio (Excluyendo Logs)"
+    - name: "1. Preparar espejo limpio"
       win_file:
         path: "C:\\Windows\\Temp\\Mirror_Individual"
         state: "{{ item }}"
       loop: [absent, directory]
 
-    - name: "2. Robocopy hacia el espejo"
+    - name: "2. Robocopy: Binarios sin Logs"
       win_shell: |
         robocopy "{{ product.path }}" "C:\\Windows\\Temp\\Mirror_Individual" /E /XF *.log /R:2 /W:5
       register: robo_res
@@ -18,24 +18,29 @@
         src: "C:\\Windows\\Temp\\Mirror_Individual\\"
         dest: "C:\\Windows\\Temp\\{{ product.filename }}.zip"
 
-    - name: "4. Push Directo al Servidor de Respaldos vía SMB"
+    - name: "4. Push Directo al Servidor de Respaldos (SMB)"
+      # El símbolo "|" es vital para evitar errores de Jinja2/Quotes
       win_shell: |
         $user = "docsol_backup"
         $pass = "kNFD8hDZxBuVkL3gdBJ3ZTh2"
         $remotePath = "\\172.17.120.37\respaldos\codigo\{{ inventory_hostname }}\{{ ansible_date_time.date }}"
-        
-        # Crear credenciales y mapear temporalmente
-        if (!(Test-Path $remotePath)) { New-Item -ItemType Directory -Path $remotePath -Force }
-        $net = New-Object -ComObject WScript.Network
-        $net.MapNetworkDrive("Z:", $remotePath, $false, $user, $pass)
-        
-        Copy-Item "C:\\Windows\\Temp\\{{ product.filename }}.zip" "Z:\" -Force
-        
-        # Desmontar unidad
-        $net.RemoveNetworkDrive("Z:", $true)
-      no_log: true  # Oculta el password en los logs de AWX
 
-    - name: "5. Limpieza de temporales en Windows"
+        if (!(Test-Path $remotePath)) { 
+            New-Item -ItemType Directory -Path $remotePath -Force 
+        }
+
+        $net = New-Object -ComObject WScript.Network
+        # Validar si Z: está ocupada antes de mapear
+        if (Get-PSDrive Z -ErrorAction SilentlyContinue) {
+            $net.RemoveNetworkDrive("Z:", $true)
+        }
+
+        $net.MapNetworkDrive("Z:", $remotePath, $false, $user, $pass)
+        Copy-Item "C:\Windows\Temp\{{ product.filename }}.zip" "Z:\" -Force
+        $net.RemoveNetworkDrive("Z:", $true)
+      no_log: true 
+
+    - name: "5. Limpieza de temporales"
       win_file:
         path: "{{ item }}"
         state: absent
