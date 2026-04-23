@@ -1,6 +1,6 @@
 ---
 - name: Respaldo de Código Estandarizado (Push SMB) - DocSolutions
-  hosts: DSMEXICO10
+  hosts: 172.17.120.10
   gather_facts: yes
   vars:
     path_apps_prod: "C:\\APPS_PROD"
