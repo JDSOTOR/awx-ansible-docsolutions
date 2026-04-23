@@ -7,7 +7,7 @@
     temp_mirror: "C:\\Windows\\Temp\\Mirror_Apps"
     temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
     # Ruta que apunta al Bind Mount para no saturar /var local
-    dest_codigo: "/var/lib/awx/projects/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    dest_codigo: "/runner/project/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
 
   tasks:
     - name: 1. Limpieza y creación de espejo
