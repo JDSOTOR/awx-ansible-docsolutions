@@ -1,28 +1,39 @@
-- name: "Backup Atómico: {{ product.filename }}"
+---
+- name: "Backup Atómico y Push SMB: {{ product.filename }}"
   block:
-    - name: "1. Preparar espejo limpio del producto"
+    - name: "1. Preparar espejo limpio (Excluyendo Logs)"
       win_file:
         path: "C:\\Windows\\Temp\\Mirror_Individual"
         state: "{{ item }}"
       loop: [absent, directory]
 
-    - name: "2. Crear espejo con Robocopy (Excluyendo .log)"
+    - name: "2. Robocopy hacia el espejo"
       win_shell: |
         robocopy "{{ product.path }}" "C:\\Windows\\Temp\\Mirror_Individual" /E /XF *.log /R:2 /W:5
       register: robo_res
-      # Robocopy usa códigos de salida del 0 al 8 como éxito
       failed_when: robo_res.rc > 8
 
-    - name: "3. Comprimir espejo (Parámetros compatibles)"
+    - name: "3. Comprimir espejo"
       community.windows.win_zip:
         src: "C:\\Windows\\Temp\\Mirror_Individual\\"
-        dest: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        dest: "C:\\Windows\\Temp\\{{ product.filename }}.zip"
 
-    - name: "4. Transferencia Directa al NFS"
-      fetch:
-        src: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
-        dest: "{{ dest_nfs }}/{{ product.filename }}.zip"
-        flat: yes
+    - name: "4. Push Directo al Servidor de Respaldos vía SMB"
+      win_shell: |
+        $user = "docsol_backup"
+        $pass = "kNFD8hDZxBuVkL3gdBJ3ZTh2"
+        $remotePath = "\\172.17.120.37\respaldos\codigo\{{ inventory_hostname }}\{{ ansible_date_time.date }}"
+        
+        # Crear credenciales y mapear temporalmente
+        if (!(Test-Path $remotePath)) { New-Item -ItemType Directory -Path $remotePath -Force }
+        $net = New-Object -ComObject WScript.Network
+        $net.MapNetworkDrive("Z:", $remotePath, $false, $user, $pass)
+        
+        Copy-Item "C:\\Windows\\Temp\\{{ product.filename }}.zip" "Z:\" -Force
+        
+        # Desmontar unidad
+        $net.RemoveNetworkDrive("Z:", $true)
+      no_log: true  # Oculta el password en los logs de AWX
 
     - name: "5. Limpieza de temporales en Windows"
       win_file:
@@ -30,4 +41,4 @@
         state: absent
       loop:
         - "C:\\Windows\\Temp\\Mirror_Individual"
-        - "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        - "C:\\Windows\\Temp\\{{ product.filename }}.zip"
