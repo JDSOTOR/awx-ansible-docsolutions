@@ -1,0 +1,18 @@
+- name: "Backup Atómico: {{ product.filename }}"
+  block:
+    - name: "Comprimir en Windows"
+      community.windows.win_zip:
+        src: "{{ product.path }}\\"
+        dest: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        exclude: "*.log"
+
+    - name: "Transferencia Directa (Fetch)"
+      fetch:
+        src: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        dest: "{{ dest_nfs }}/{{ product.filename }}.zip"
+        flat: yes
+
+    - name: "Limpieza inmediata (Windows)"
+      win_file:
+        path: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        state: absent

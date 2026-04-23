@@ -1,0 +1,33 @@
+---
+- name: Respaldo Seguro - Protección de Partición /var
+  hosts: 172.17.120.10
+  vars:
+    path_apps_prod: "C:\\APPS_PROD"
+    temp_zip_dir: "C:\\Windows\\Temp\\Backups"
+    # Usaremos el Symlink que apunta al NFS
+    dest_nfs: "/var/lib/awx/projects/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+
+  tasks:
+    - name: 1. Listar productos
+      win_find:
+        paths: "{{ path_apps_prod }}"
+        file_type: directory
+      register: product_dirs
+
+    - name: 2. Validar espacio disponible en /var (Servidor AWX)
+      shell: |
+        df /var | tail -1 | awk '{print $4}'
+      delegate_to: localhost
+      register: var_space_kb
+
+    - name: 3. Abortar si queda menos de 5GB en /var
+      fail:
+        msg: "Espacio insuficiente en /var para procesar el respaldo."
+      when: var_space_kb.stdout | int < 5242880
+      delegate_to: localhost
+
+    - name: 4. Procesar productos uno a uno
+      include_tasks: inner_backup_seguro.yml
+      loop: "{{ product_dirs.files }}"
+      loop_control:
+        loop_var: product
