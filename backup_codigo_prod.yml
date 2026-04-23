@@ -30,6 +30,13 @@
       community.windows.win_zip:
         src: "{{ temp_mirror }}\\"
         dest: "{{ temp_zip_code }}"
+        
+    - name: 3.5 Preparar directorio local en el servidor AWX
+      file:
+        path: "{{ dest_codigo }}"
+        state: directory
+        mode: '0777'
+      delegate_to: localhost
 
     - name: 4. Transferir Código al NFS
       fetch:
