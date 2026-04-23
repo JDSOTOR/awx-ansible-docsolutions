@@ -35,19 +35,14 @@
 
     - name: 3. Comprimir Código
       community.windows.win_zip:
+        src: "{{ path_apps_prod }}\\"
         dest: "{{ temp_zip_code }}"
-        sources: "{{ path_apps_prod }}\\"
-        action: add
-        # Nota: Usamos el resultado de find_code si quisieras filtrar archivo por archivo, 
-        # pero para portales web, comprimir la carpeta raíz con exclusiones es más eficiente.
       when: find_code.matched > 0
 
     - name: 4. Comprimir Logs
       community.windows.win_zip:
+        src: "{{ path_apps_prod }}\\*.log" # Comprimimos directamente los logs de la ruta
         dest: "{{ temp_zip_logs }}"
-        sources: "{{ item.path }}"
-        action: add
-      loop: "{{ find_logs.files }}"
       when: find_logs.matched > 0
 
     - name: 5. Transferir a Almacenamiento Central (NFS)
