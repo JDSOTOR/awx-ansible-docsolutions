@@ -1,0 +1,37 @@
+---
+- name: Respaldo de Código Estandarizado - DocSolutions
+  hosts: 172.17.120.10
+  gather_facts: yes
+  vars:
+    path_apps_prod: "C:\\APPS_PROD"
+    # Punto de montaje NFS en el DSA57
+    base_nfs: "/mnt/respaldos_externos"
+    dest_codigo: "{{ base_nfs }}/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
+
+  tasks:
+    - name: 1. Comprimir todo el directorio (Excluyendo Logs)
+      community.windows.win_zip:
+        src: "{{ path_apps_prod }}\\"
+        dest: "{{ temp_zip_code }}"
+        # Excluimos cualquier archivo que termine en .log para evitar bloqueos y discrepancias
+        exclude: "*.log"
+      register: zip_result
+
+    - name: 2. Crear directorio de destino en NFS (Si no existe)
+      file:
+        path: "{{ dest_codigo }}"
+        state: directory
+      delegate_to: localhost
+
+    - name: 3. Transferir Código al Almacenamiento Central
+      fetch:
+        src: "{{ temp_zip_code }}"
+        dest: "{{ dest_codigo }}/codigo_apps.zip"
+        flat: yes
+      when: zip_result.success
+
+    - name: 4. Limpieza del temporal en Windows
+      win_file:
+        path: "{{ temp_zip_code }}"
+        state: absent
