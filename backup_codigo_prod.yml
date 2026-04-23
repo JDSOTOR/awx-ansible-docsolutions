@@ -6,8 +6,8 @@
     path_apps_prod: "C:\\APPS_PROD"
     temp_zip_dir: "C:\\Windows\\Temp\\Backups"
     # Datos del servidor de respaldos (DSA57)
-    smb_server: "172.17.119.57"
-    smb_share: "respaldos_prod"
+    smb_server: "172.17.119.37"
+    smb_share: "respaldos"
 
   tasks:
     - name: 1. Listar carpetas de productos en APPS_PROD
