@@ -4,34 +4,36 @@
   gather_facts: yes
   vars:
     path_apps_prod: "C:\\APPS_PROD"
-    # Punto de montaje NFS en el DSA57
+    temp_mirror: "C:\\Windows\\Temp\\Mirror_Apps"
+    temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
     base_nfs: "/mnt/respaldos_externos"
     dest_codigo: "{{ base_nfs }}/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
-    temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
 
   tasks:
-    - name: 1. Comprimir todo el directorio (Excluyendo Logs)
+    - name: 1. Limpiar espejo previo si existe
+      win_file:
+        path: "{{ temp_mirror }}"
+        state: absent
+
+    - name: 2. Crear espejo de carpetas (Excluyendo archivos .log)
+      win_shell: |
+        Copy-Item -Path "{{ path_apps_prod }}\*" -Destination "{{ temp_mirror }}" -Recurse -Exclude *.log -ErrorAction SilentlyContinue
+
+    - name: 3. Comprimir el espejo (Solo src y dest)
       community.windows.win_zip:
-        src: "{{ path_apps_prod }}\\"
+        src: "{{ temp_mirror }}\\"
         dest: "{{ temp_zip_code }}"
-        # Excluimos cualquier archivo que termine en .log para evitar bloqueos y discrepancias
-        exclude: "*.log"
-      register: zip_result
 
-    - name: 2. Crear directorio de destino en NFS (Si no existe)
-      file:
-        path: "{{ dest_codigo }}"
-        state: directory
-      delegate_to: localhost
-
-    - name: 3. Transferir Código al Almacenamiento Central
+    - name: 4. Transferir Código al NFS
       fetch:
         src: "{{ temp_zip_code }}"
         dest: "{{ dest_codigo }}/codigo_apps.zip"
         flat: yes
-      when: zip_result.success
 
-    - name: 4. Limpieza del temporal en Windows
+    - name: 5. Limpieza de temporales
       win_file:
-        path: "{{ temp_zip_code }}"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ temp_mirror }}"
+        - "{{ temp_zip_code }}"
