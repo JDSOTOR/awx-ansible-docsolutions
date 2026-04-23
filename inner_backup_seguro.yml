@@ -18,8 +18,8 @@
         src: "C:\\Windows\\Temp\\Mirror_Individual\\"
         dest: "C:\\Windows\\Temp\\{{ product.filename }}.zip"
 
-    - name: 4. Push Directo al Servidor de Respaldos (SMB)
-      # El símbolo "|" es obligatorio para scripts de varias líneas
+    - name: "4. Push Directo al Servidor de Respaldos (SMB)"
+      # Usamos el pipe para indicar bloque de texto multilínea
       win_shell: |
         $user = "docsol_backup"
         $pass = "kNFD8hDZxBuVkL3gdBJ3ZTh2"
@@ -30,7 +30,6 @@
         }
 
         $net = New-Object -ComObject WScript.Network
-        # Limpieza de unidad Z: por si quedó mapeada de un intento previo
         if (Get-PSDrive Z -ErrorAction SilentlyContinue) {
             $net.RemoveNetworkDrive("Z:", $true)
         }
