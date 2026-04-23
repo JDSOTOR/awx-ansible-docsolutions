@@ -8,11 +8,15 @@ if (!(Test-Path $remotePath)) {
     New-Item -ItemType Directory -Path $remotePath -Force 
 }
 
-$net = New-Object -ComObject WScript.Network
-if (Get-PSDrive Z -ErrorAction SilentlyContinue) {
+$net.MapNetworkDrive("Z:", $remotePath, $false, $user, $pass)
+
+# Agregamos validación de error explícita
+try {
+    Copy-Item "C:\Windows\Temp\$filename.zip" "Z:\" -Force -ErrorAction Stop
+    Write-Output "Copia exitosa de $filename"
+} catch {
+    Write-Error "Fallo la copia al NFS: $_"
+    exit 1  # Esto hará que AWX marque la tarea como FALLIDA
+} finally {
     $net.RemoveNetworkDrive("Z:", $true)
 }
-
-$net.MapNetworkDrive("Z:", $remotePath, $false, $user, $pass)
-Copy-Item "C:\Windows\Temp\$filename.zip" "Z:\" -Force
-$net.RemoveNetworkDrive("Z:", $true)
