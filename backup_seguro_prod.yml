@@ -1,33 +1,42 @@
 ---
-- name: Respaldo Seguro - Protección de Partición /var
+- name: Respaldo de Código Estandarizado - DocSolutions
   hosts: 172.17.120.10
+  gather_facts: yes
   vars:
     path_apps_prod: "C:\\APPS_PROD"
-    temp_zip_dir: "C:\\Windows\\Temp\\Backups"
-    # Usaremos el Symlink que apunta al NFS
-    dest_nfs: "/var/lib/awx/projects/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    temp_mirror: "C:\\Windows\\Temp\\Mirror_Apps"
+    temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
+    # Ruta que apunta al Bind Mount para no saturar /var local
+    dest_codigo: "/var/lib/awx/projects/nfs_docsol/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
 
   tasks:
-    - name: 1. Listar productos
-      win_find:
-        paths: "{{ path_apps_prod }}"
-        file_type: directory
-      register: product_dirs
+    - name: 1. Limpieza y creación de espejo
+      win_file:
+        path: "{{ temp_mirror }}"
+        state: "{{ item }}"
+      loop: [absent, directory]
 
-    - name: 2. Validar espacio disponible en /var (Servidor AWX)
-      shell: |
-        df /var | tail -1 | awk '{print $4}'
-      delegate_to: localhost
-      register: var_space_kb
+    - name: 2. Robocopy (La forma segura de excluir logs)
+      win_shell: |
+        robocopy "{{ path_apps_prod }}" "{{ temp_mirror }}" /E /XF *.log /R:2 /W:5
+      register: robocopy_status
+      failed_when: robocopy_status.rc > 8
 
-    - name: 3. Abortar si queda menos de 5GB en /var
-      fail:
-        msg: "Espacio insuficiente en /var para procesar el respaldo."
-      when: var_space_kb.stdout | int < 5242880
-      delegate_to: localhost
+    - name: 3. Comprimir (SOLO src y dest para evitar errores de versión)
+      community.windows.win_zip:
+        src: "{{ temp_mirror }}\\"
+        dest: "{{ temp_zip_code }}"
 
-    - name: 4. Procesar productos uno a uno
-      include_tasks: inner_backup_seguro.yml
-      loop: "{{ product_dirs.files }}"
-      loop_control:
-        loop_var: product
+    - name: 4. Transferencia al NFS (Vía Bind Mount)
+      fetch:
+        src: "{{ temp_zip_code }}"
+        dest: "{{ dest_codigo }}/codigo_apps.zip"
+        flat: yes
+
+    - name: 5. Limpieza final en Windows
+      win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ temp_mirror }}"
+        - "{{ temp_zip_code }}"

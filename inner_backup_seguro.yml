@@ -1,18 +1,33 @@
 - name: "Backup Atómico: {{ product.filename }}"
   block:
-    - name: "Comprimir en Windows"
-      community.windows.win_zip:
-        src: "{{ product.path }}\\"
-        dest: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
-        exclude: "*.log"
+    - name: "1. Preparar espejo limpio del producto"
+      win_file:
+        path: "C:\\Windows\\Temp\\Mirror_Individual"
+        state: "{{ item }}"
+      loop: [absent, directory]
 
-    - name: "Transferencia Directa (Fetch)"
+    - name: "2. Crear espejo con Robocopy (Excluyendo .log)"
+      win_shell: |
+        robocopy "{{ product.path }}" "C:\\Windows\\Temp\\Mirror_Individual" /E /XF *.log /R:2 /W:5
+      register: robo_res
+      # Robocopy usa códigos de salida del 0 al 8 como éxito
+      failed_when: robo_res.rc > 8
+
+    - name: "3. Comprimir espejo (Parámetros compatibles)"
+      community.windows.win_zip:
+        src: "C:\\Windows\\Temp\\Mirror_Individual\\"
+        dest: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+
+    - name: "4. Transferencia Directa al NFS"
       fetch:
         src: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
         dest: "{{ dest_nfs }}/{{ product.filename }}.zip"
         flat: yes
 
-    - name: "Limpieza inmediata (Windows)"
+    - name: "5. Limpieza de temporales en Windows"
       win_file:
-        path: "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "C:\\Windows\\Temp\\Mirror_Individual"
+        - "{{ temp_zip_dir }}\\{{ product.filename }}.zip"
