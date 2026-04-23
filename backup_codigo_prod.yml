@@ -1,53 +1,35 @@
 ---
-- name: Respaldo de Código Estandarizado - DocSolutions
+- name: Respaldo de Código Estandarizado (Push SMB) - DocSolutions
   hosts: 172.17.120.10
   gather_facts: yes
   vars:
     path_apps_prod: "C:\\APPS_PROD"
-    temp_mirror: "C:\\Windows\\Temp\\Mirror_Apps"
-    temp_zip_code: "C:\\Windows\\Temp\\codigo_produccion.zip"
-    base_nfs: "/mnt/respaldos_externos"
-    dest_codigo: "{{ base_nfs }}/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    temp_zip_dir: "C:\\Windows\\Temp\\Backups"
+    # Datos del servidor de respaldos (DSA57)
+    smb_server: "172.17.119.57"
+    smb_share: "respaldos_prod"
 
   tasks:
-    - name: 1. Asegurar limpieza y creación de carpeta temporal
+    - name: 1. Listar carpetas de productos en APPS_PROD
+      win_find:
+        paths: "{{ path_apps_prod }}"
+        file_type: directory
+      register: product_dirs
+
+    - name: 2. Asegurar que la carpeta de ZIPS temporales esté lista en Windows
       win_file:
-        path: "{{ temp_mirror }}"
+        path: "{{ temp_zip_dir }}"
         state: "{{ item }}"
-      loop:
-        - absent
-        - directory
+      loop: [absent, directory]
 
-    - name: 2. Crear espejo con Robocopy (Excluyendo .log)
-      win_shell: |
-        robocopy "{{ path_apps_prod }}" "{{ temp_mirror }}" /E /XF *.log /R:2 /W:5
-      register: robocopy_status
-      # Robocopy usa códigos de salida (exit codes) del 0 al 8 como "éxito".
-      # Ansible cree que cualquier cosa arriba de 0 es error, así que lo corregimos:
-      failed_when: robocopy_status.rc > 8
+    - name: 3. Ejecutar respaldo atómico por cada producto
+      # Aquí llamamos al archivo que configuramos anteriormente
+      include_tasks: inner_backup_seguro.yml
+      loop: "{{ product_dirs.files }}"
+      loop_control:
+        loop_var: product
 
-    - name: 3. Comprimir el espejo (Solo src y dest)
-      community.windows.win_zip:
-        src: "{{ temp_mirror }}\\"
-        dest: "{{ temp_zip_code }}"
-        
-    - name: 3.5 Preparar directorio local en el servidor AWX
-      file:
-        path: "{{ dest_codigo }}"
-        state: directory
-        mode: '0777'
-      delegate_to: localhost
-
-    - name: 4. Transferir Código al NFS
-      fetch:
-        src: "{{ temp_zip_code }}"
-        dest: "{{ dest_codigo }}/codigo_apps.zip"
-        flat: yes
-
-    - name: 5. Limpieza final
+    - name: 4. Limpieza final del directorio de ZIPS
       win_file:
-        path: "{{ item }}"
+        path: "{{ temp_zip_dir }}"
         state: absent
-      loop:
-        - "{{ temp_mirror }}"
-        - "{{ temp_zip_code }}"
