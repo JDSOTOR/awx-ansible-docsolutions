@@ -10,14 +10,21 @@
     dest_codigo: "{{ base_nfs }}/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
 
   tasks:
-    - name: 1. Limpiar espejo previo si existe
+    - name: 1. Asegurar limpieza y creación de carpeta temporal
       win_file:
         path: "{{ temp_mirror }}"
-        state: absent
+        state: "{{ item }}"
+      loop:
+        - absent
+        - directory
 
-    - name: 2. Crear espejo de carpetas (Excluyendo archivos .log)
+    - name: 2. Crear espejo con Robocopy (Excluyendo .log)
       win_shell: |
-        Copy-Item -Path "{{ path_apps_prod }}\*" -Destination "{{ temp_mirror }}" -Recurse -Exclude *.log -ErrorAction SilentlyContinue
+        robocopy "{{ path_apps_prod }}" "{{ temp_mirror }}" /E /XF *.log /R:2 /W:5
+      register: robocopy_status
+      # Robocopy usa códigos de salida (exit codes) del 0 al 8 como "éxito".
+      # Ansible cree que cualquier cosa arriba de 0 es error, así que lo corregimos:
+      failed_when: robocopy_status.rc > 8
 
     - name: 3. Comprimir el espejo (Solo src y dest)
       community.windows.win_zip:
@@ -30,7 +37,7 @@
         dest: "{{ dest_codigo }}/codigo_apps.zip"
         flat: yes
 
-    - name: 5. Limpieza de temporales
+    - name: 5. Limpieza final
       win_file:
         path: "{{ item }}"
         state: absent
