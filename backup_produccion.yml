@@ -1,0 +1,68 @@
+---
+- name: Prueba de Respaldo Estandarizado - DocSolutions
+  hosts: 172.17.120.10
+  gather_facts: yes
+  vars:
+    # Origen en Windows
+    path_apps_prod: "C:\\APPS_PROD"
+    regex_solo_codigo: '^(?!.*(\.log|\.txt|\.tmp|\.bak)$).*$'
+    regex_solo_logs: '.*\.log$'
+    
+    # Destino en el punto de montaje NFS del AWX
+    base_nfs: "/mnt/respaldos_externos"
+    dest_codigo: "{{ base_nfs }}/codigo/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    dest_logs: "{{ base_nfs }}/logs/{{ inventory_hostname }}/{{ ansible_date_time.date }}"
+    
+    temp_zip_code: "C:\\Windows\\Temp\\code_prod.zip"
+    temp_zip_logs: "C:\\Windows\\Temp\\logs_prod.zip"
+
+  tasks:
+    - name: 1. Buscar Código (Excluyendo basura)
+      win_find:
+        paths: "{{ path_apps_prod }}"
+        patterns: "{{ regex_solo_codigo }}"
+        use_regex: yes
+        recurse: yes
+      register: find_code
+
+    - name: 2. Buscar Logs
+      win_find:
+        paths: "{{ path_apps_prod }}"
+        patterns: "{{ regex_solo_logs }}"
+        use_regex: yes
+        recurse: yes
+      register: find_logs
+
+    - name: 3. Comprimir Código
+      community.windows.win_zip:
+        dest: "{{ temp_zip_code }}"
+        sources: "{{ path_apps_prod }}\\"
+        action: add
+        # Nota: Usamos el resultado de find_code si quisieras filtrar archivo por archivo, 
+        # pero para portales web, comprimir la carpeta raíz con exclusiones es más eficiente.
+      when: find_code.matched > 0
+
+    - name: 4. Comprimir Logs
+      community.windows.win_zip:
+        dest: "{{ temp_zip_logs }}"
+        sources: "{{ item.path }}"
+        action: add
+      loop: "{{ find_logs.files }}"
+      when: find_logs.matched > 0
+
+    - name: 5. Transferir a Almacenamiento Central (NFS)
+      fetch:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        flat: yes
+      loop:
+        - { src: "{{ temp_zip_code }}", dest: "{{ dest_codigo }}/portal_apps.zip" }
+        - { src: "{{ temp_zip_logs }}", dest: "{{ dest_logs }}/logs_apps.zip" }
+
+    - name: 6. Limpieza de temporales
+      win_file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ temp_zip_code }}"
+        - "{{ temp_zip_logs }}"
