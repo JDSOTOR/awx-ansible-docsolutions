@@ -31,12 +31,17 @@
         src: push_backup.ps1
         dest: "C:\\DocSol_Automation\\push_backup.ps1"
 
-    - name: "5. Ejecutar Push Directo"
+    - name: "5. Ejecutar Push Directo (Con Elevación de Privilegios)"
       win_shell: >
         powershell.exe -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
         -inventory_hostname "{{ inventory_hostname }}"
         -date "{{ ansible_date_time.date }}"
         -filename "{{ product.filename }}"
+      # ESTO FUERZA LA EJECUCIÓN COMO ADMINISTRADOR
+      become: yes
+      become_method: runas
+      become_user: Administrator  # O el usuario con el que te conectas si tiene perfil admin
+      no_log: false
 
     - name: "6. Limpieza"
       win_file:
