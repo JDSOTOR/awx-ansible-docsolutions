@@ -1,9 +1,17 @@
 ---
 - name: "Backup Atómico: {{ product.filename }}"
   block:
-    - name: "1. Preparar espejo"
+    - name: "0. Asegurar directorios de trabajo"
       win_file:
-        path: "C:\\Windows\\Temp\\Mirror_Individual"
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "C:\\DocSol_Automation"
+        - "C:\\Windows\\Temp\\Backups"
+
+    - name: "1. Preparar espejo limpio"
+      win_file:
+        path: "C:\\Windows\\Temp\\Mirror_{{ product.filename }}"
         state: "{{ item }}"
       loop: [absent, directory]
 
@@ -21,15 +29,14 @@
     - name: "4. Enviar Script de Push al Windows"
       win_copy:
         src: push_backup.ps1
-        dest: "C:\\Scripts_AWX\\push_backup.ps1"
+        dest: "C:\\DocSol_Automation\\push_backup.ps1"
 
-    - name: "5. Ejecutar Push Directo (Sin errores de Jinja2)"
+    - name: "5. Ejecutar Push Directo"
       win_shell: >
-        powershell.exe -ExecutionPolicy Bypass -File C:\Windows\Temp\push_backup.ps1 
-        -inventory_hostname "{{ inventory_hostname }}" 
-        -date "{{ ansible_date_time.date }}" 
+        powershell.exe -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
+        -inventory_hostname "{{ inventory_hostname }}"
+        -date "{{ ansible_date_time.date }}"
         -filename "{{ product.filename }}"
-      no_log: false
 
     - name: "6. Limpieza"
       win_file:
