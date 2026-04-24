@@ -1,5 +1,5 @@
 ---
-- name: Respaldo Multi-Ruta Dinámico (Resiliente) - DocSolutions
+- name: Respaldo Multi-Ruta Dinámico (Limpio y Resiliente) - DocSolutions
   hosts: "{{ target_hosts | default('all') }}"
   gather_facts: yes
   vars:
@@ -8,6 +8,8 @@
       - "D:\\APPS_PROD"
       - "E:\\"
       - "F:\\APPS_PROD"
+    # Nueva ruta estándar para evitar bloqueos en Temp
+    scripts_dir: "C:\\DocSol_Automation"
     temp_zip_dir: "C:\\Windows\\Temp\\Backups"
 
   tasks:
@@ -15,29 +17,43 @@
       set_fact:
         rutas_finales: "{{ mis_rutas | default(default_rutas) }}"
 
-    - name: 2. Buscar carpetas en todas las rutas definidas
+    - name: 2. Validar existencia de rutas físicas
+      win_stat:
+        path: "{{ item }}"
+      register: validacion_rutas
+      loop: "{{ rutas_finales }}"
+
+    - name: 3. Reportar rutas no encontradas (Informativo)
+      debug:
+        msg: "AVISO: La ruta {{ item.item }} no existe en este host. Se omitirá."
+      loop: "{{ validacion_rutas.results }}"
+      when: not item.stat.exists
+
+    - name: 4. Buscar carpetas de productos en rutas válidas
       win_find:
-        paths: "{{ item }}"
+        paths: "{{ item.item }}"
         file_type: directory
         recurse: no
       register: find_results
-      loop: "{{ rutas_finales }}"
-      # Evita que el job falle si una unidad (D:, E:, etc.) no está montada
-      ignore_errors: yes
+      loop: "{{ validacion_rutas.results }}"
+      when: item.stat.exists
+      # Ya no necesitamos ignore_errors porque validamos antes con win_stat
 
-    - name: 3. Consolidar lista de productos (Filtrado de rutas válidas)
+    - name: 5. Consolidar lista maestra de productos
       set_fact:
-        # Filtramos solo los resultados que tienen el atributo 'files' (los que no fallaron)
         lista_productos: "{{ find_results.results | selectattr('files', 'defined') | map(attribute='files') | flatten }}"
 
-    - name: 4. Validar si se encontraron productos
-      debug:
-        msg: "Se encontraron {{ lista_productos | length }} carpetas para respaldar."
+    - name: 6. Preparar entorno de ejecución estándar
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "{{ scripts_dir }}"
+        - "{{ temp_zip_dir }}"
 
-    - name: 5. Ejecutar respaldo atómico
+    - name: 7. Ejecutar respaldo atómico
       include_tasks: inner_backup_seguro.yml
       loop: "{{ lista_productos }}"
       loop_control:
         loop_var: product
-      # Solo ejecutamos si la lista no está vacía para evitar errores de loop
       when: lista_productos | length > 0

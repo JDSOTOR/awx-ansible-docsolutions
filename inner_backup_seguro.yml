@@ -21,7 +21,7 @@
     - name: "4. Enviar Script de Push al Windows"
       win_copy:
         src: push_backup.ps1
-        dest: "C:\\Windows\\Temp\\push_backup.ps1"
+        dest: "C:\\Scripts_AWX\\push_backup.ps1"
 
     - name: "5. Ejecutar Push Directo (Sin errores de Jinja2)"
       win_shell: >
