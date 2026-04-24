@@ -31,27 +31,34 @@
         src: push_backup.ps1
         dest: "C:\\DocSol_Automation\\push_backup.ps1"
 
-    - name: "5. Ejecutar Push Directo vía Tarea Programada (Salto de UAC)"
+    - name: "5. Crear Tarea Programada para el Push"
       community.windows.win_scheduled_task:
         name: "Ansible_Backup_Push"
-        shell: powershell
-        command: >
-          powershell.exe -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
-          -inventory_hostname "{{ inventory_hostname }}"
-          -date "{{ ansible_date_time.date }}"
-          -filename "{{ product.filename }}"
-        user: SYSTEM
+        description: "Ejecuta el push de backup con privilegios elevados"
+        actions:
+          - path: "powershell.exe"
+            arguments: >
+              -NoProfile -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
+              -inventory_hostname "{{ inventory_hostname }}"
+              -date "{{ ansible_date_time.date }}"
+              -filename "{{ product.filename }}"
+        username: "SYSTEM"
         run_level: highest
         state: present
         enabled: yes
 
-    - name: "5b. Disparar y esperar la Tarea"
+    - name: "5b. Disparar Tarea y esperar finalización"
       win_shell: |
-        Start-ScheduledTask -TaskName "Ansible_Backup_Push"
+        $taskName = "Ansible_Backup_Push"
+        Start-ScheduledTask -TaskName $taskName
+        # Esperar a que termine (mientras el estado sea 'Running')
         do { 
-          Start-Sleep -Seconds 2
-          $status = (Get-ScheduledTask -TaskName "Ansible_Backup_Push").State 
+            Start-Sleep -Seconds 2
+            $status = (Get-ScheduledTask -TaskName $taskName).State 
         } while ($status -eq "Running")
+        
+        # Opcional: Eliminar la tarea después de usarla para limpieza
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 
     - name: "6. Limpieza"
       win_file:
