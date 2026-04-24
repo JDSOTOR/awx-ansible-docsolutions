@@ -29,7 +29,7 @@
         -inventory_hostname "{{ inventory_hostname }}" 
         -date "{{ ansible_date_time.date }}" 
         -filename "{{ product.filename }}"
-      no_log: true
+      no_log: false
 
     - name: "6. Limpieza"
       win_file:
