@@ -8,6 +8,7 @@
       - "C:\\APPS_PROD"
       - "D:\\APPS_PROD"
       - "E:\\"
+      - "F:\\APPS_PROD"
     temp_zip_dir: "C:\\Windows\\Temp\\Backups"
 
   tasks:
