@@ -31,17 +31,27 @@
         src: push_backup.ps1
         dest: "C:\\DocSol_Automation\\push_backup.ps1"
 
-    - name: "5. Ejecutar Push Directo (Elevando privilegios)"
-      win_shell: >
-        powershell.exe -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
-        -inventory_hostname "{{ inventory_hostname }}"
-        -date "{{ ansible_date_time.date }}"
-        -filename "{{ product.filename }}"
-      # Configuración de elevación
-      become: yes
-      become_method: runas
-      become_user: System  # Usar 'System' es el nivel máximo para saltar UAC
-      no_log: false
+    - name: "5. Ejecutar Push Directo vía Tarea Programada (Salto de UAC)"
+      community.windows.win_scheduled_task:
+        name: "Ansible_Backup_Push"
+        shell: powershell
+        command: >
+          powershell.exe -ExecutionPolicy Bypass -File "C:\DocSol_Automation\push_backup.ps1"
+          -inventory_hostname "{{ inventory_hostname }}"
+          -date "{{ ansible_date_time.date }}"
+          -filename "{{ product.filename }}"
+        user: SYSTEM
+        run_level: highest
+        state: present
+        enabled: yes
+
+    - name: "5b. Disparar y esperar la Tarea"
+      win_shell: |
+        Start-ScheduledTask -TaskName "Ansible_Backup_Push"
+        do { 
+          Start-Sleep -Seconds 2
+          $status = (Get-ScheduledTask -TaskName "Ansible_Backup_Push").State 
+        } while ($status -eq "Running")
 
     - name: "6. Limpieza"
       win_file:
