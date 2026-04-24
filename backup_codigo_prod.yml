@@ -1,9 +1,8 @@
 ---
-- name: Respaldo Multi-Ruta Dinámico - DocSolutions
-  hosts: "{{ target_hosts | default('all') }}"  # Permite filtrar desde AWX
+- name: Respaldo Multi-Ruta Dinámico (Resiliente) - DocSolutions
+  hosts: "{{ target_hosts | default('all') }}"
   gather_facts: yes
   vars:
-    # Estas son las rutas por defecto si el host no tiene unas específicas
     default_rutas:
       - "C:\\APPS_PROD"
       - "D:\\APPS_PROD"
@@ -13,23 +12,32 @@
 
   tasks:
     - name: 1. Determinar rutas a respaldar
-      # Si el host tiene definida su propia lista 'mis_rutas', la usa; si no, usa la default
       set_fact:
         rutas_finales: "{{ mis_rutas | default(default_rutas) }}"
 
-    - name: 2. Buscar carpetas en todas las rutas
+    - name: 2. Buscar carpetas en todas las rutas definidas
       win_find:
         paths: "{{ item }}"
         file_type: directory
+        recurse: no
       register: find_results
       loop: "{{ rutas_finales }}"
+      # Evita que el job falle si una unidad (D:, E:, etc.) no está montada
+      ignore_errors: yes
 
-    - name: 3. Consolidar lista de productos
+    - name: 3. Consolidar lista de productos (Filtrado de rutas válidas)
       set_fact:
-        lista_productos: "{{ find_results.results | map(attribute='files') | flatten }}"
+        # Filtramos solo los resultados que tienen el atributo 'files' (los que no fallaron)
+        lista_productos: "{{ find_results.results | selectattr('files', 'defined') | map(attribute='files') | flatten }}"
 
-    - name: 4. Ejecutar respaldo atómico
+    - name: 4. Validar si se encontraron productos
+      debug:
+        msg: "Se encontraron {{ lista_productos | length }} carpetas para respaldar."
+
+    - name: 5. Ejecutar respaldo atómico
       include_tasks: inner_backup_seguro.yml
       loop: "{{ lista_productos }}"
       loop_control:
         loop_var: product
+      # Solo ejecutamos si la lista no está vacía para evitar errores de loop
+      when: lista_productos | length > 0
