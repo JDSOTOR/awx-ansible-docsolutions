@@ -1,35 +1,34 @@
 ---
-- name: Respaldo de Código Estandarizado (Push SMB) - DocSolutions
-  hosts: 172.17.120.10
+- name: Respaldo Multi-Ruta Dinámico - DocSolutions
+  hosts: "{{ target_hosts | default('all') }}"  # Permite filtrar desde AWX
   gather_facts: yes
   vars:
-    path_apps_prod: "C:\\APPS_PROD"
+    # Estas son las rutas por defecto si el host no tiene unas específicas
+    default_rutas:
+      - "C:\\APPS_PROD"
+      - "D:\\APPS_PROD"
+      - "E:\\"
     temp_zip_dir: "C:\\Windows\\Temp\\Backups"
-    # Datos del servidor de respaldos (DSA57)
-    smb_server: "172.17.119.37"
-    smb_share: "respaldos"
 
   tasks:
-    - name: 1. Listar carpetas de productos en APPS_PROD
+    - name: 1. Determinar rutas a respaldar
+      # Si el host tiene definida su propia lista 'mis_rutas', la usa; si no, usa la default
+      set_fact:
+        rutas_finales: "{{ mis_rutas | default(default_rutas) }}"
+
+    - name: 2. Buscar carpetas en todas las rutas
       win_find:
-        paths: "{{ path_apps_prod }}"
+        paths: "{{ item }}"
         file_type: directory
-      register: product_dirs
+      register: find_results
+      loop: "{{ rutas_finales }}"
 
-    - name: 2. Asegurar que la carpeta de ZIPS temporales esté lista en Windows
-      win_file:
-        path: "{{ temp_zip_dir }}"
-        state: "{{ item }}"
-      loop: [absent, directory]
+    - name: 3. Consolidar lista de productos
+      set_fact:
+        lista_productos: "{{ find_results.results | map(attribute='files') | flatten }}"
 
-    - name: 3. Ejecutar respaldo atómico por cada producto
-      # Aquí llamamos al archivo que configuramos anteriormente
+    - name: 4. Ejecutar respaldo atómico
       include_tasks: inner_backup_seguro.yml
-      loop: "{{ product_dirs.files }}"
+      loop: "{{ lista_productos }}"
       loop_control:
         loop_var: product
-
-    - name: 4. Limpieza final del directorio de ZIPS
-      win_file:
-        path: "{{ temp_zip_dir }}"
-        state: absent
